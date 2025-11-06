@@ -4,3 +4,10 @@ export interface TranscriptMessage {
   text: string;
   isFinal: boolean;
 }
+
+export interface Conversation {
+  id: string;
+  timestamp: number;
+  title: string;
+  messages: TranscriptMessage[];
+}
