@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import type { TranscriptMessage, Conversation } from './types';
@@ -36,6 +37,7 @@ const content = {
     newChat: 'New Chat',
     clearHistory: 'Clear History',
     clearHistoryConfirm: 'Are you sure you want to clear all history?',
+    startNewConversationConfirm: 'Start a new conversation? Your current chat will be cleared.',
     downloadChat: 'Download Chat',
     retry: 'Retry',
     topics: {
@@ -70,6 +72,7 @@ const content = {
     newChat: 'नई चैट',
     clearHistory: 'इतिहास साफ़ करें',
     clearHistoryConfirm: 'क्या आप वाकई सारा इतिहास साफ़ करना चाहते हैं?',
+    startNewConversationConfirm: 'नई बातचीत शुरू करें? आपकी वर्तमान चैट साफ़ हो जाएगी।',
     downloadChat: 'चैट डाउनलोड करें',
     retry: 'पुनः प्रयास करें',
     topics: {
@@ -99,6 +102,10 @@ const systemInstructions = {
 type Mode = 'standard' | 'quick' | 'deep';
 type SessionState = 'idle' | 'connecting' | 'live' | 'recording' | 'processing' | 'speaking';
 type Theme = 'light' | 'dark';
+interface PinnedMessage extends TranscriptMessage { pinnedAt: number; }
+interface VoiceSettings { rate: number; pitch: number; volume: number; }
+interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+
 
 // --- SVG Icons ---
 const MicIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v1a7 7 0 0 1-14 0v-1h2v1a5 5 0 0 0 10 0v-1zM12 18.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2a.5.5 0 0 1 .5.5z" /></svg>;
@@ -117,10 +124,14 @@ const TransportIcon = ({ c }) => <g className={c}>🚌</g>;
 const DemocracyIcon = ({ c }) => <g className={c}>🗳️</g>;
 const NewChatIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 9h-4v4h-2v-4H7V9h4V5h2v4h4v2z"/></svg>;
 const ShareIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>;
-const BookmarkIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>;
+const PinIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M16 9V4h-2v5h-2V4H8v5H6V4H4v7h2v2h2v-2h2v2h2v-2h2V4h-2v5h-2zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>;
+const PinnedIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>;
 const CopyIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
 const ChevronDownIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>;
 const SearchIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>;
+const SettingsIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" /></svg>;
+const CloseIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>;
+
 
 const App = () => {
   const [language, setLanguage] = useState<'en' | 'hi'>('hi');
@@ -147,11 +158,18 @@ const App = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showScrollDown, setShowScrollDown] = useState(false);
 
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<PinnedMessage[]>([]);
+  const [isPinnedPanelOpen, setIsPinnedPanelOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({ rate: 1.0, pitch: 1.0, volume: 0.8 });
+  
   const aiRef = useRef<GoogleGenAI | null>(null);
   const sessionRef = useRef<any | null>(null); 
   const streamRef = useRef<MediaStream | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -162,15 +180,26 @@ const App = () => {
   const lastUserMessageRef = useRef<string | null>(null);
   const statusRef = useRef(sessionState);
 
+  const addToast = (message, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
+
   useEffect(() => { statusRef.current = sessionState; }, [sessionState]);
 
   useEffect(() => {
     const container = transcriptContainerRef.current;
     if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      const isScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 150;
+      if (isScrolledToBottom) {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      }
       const handleScroll = () => {
-        const isScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-        setShowScrollDown(!isScrolledToBottom);
+        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        setShowScrollDown(!isAtBottom);
       };
       container.addEventListener('scroll', handleScroll);
       return () => container.removeEventListener('scroll', handleScroll);
@@ -192,8 +221,10 @@ const App = () => {
 
   useEffect(() => {
     try {
-        const saved = localStorage.getItem('civic-sense-guru-history'); if (saved) setHistory(JSON.parse(saved));
+        const savedHistory = localStorage.getItem('civic-sense-guru-history'); if (savedHistory) setHistory(JSON.parse(savedHistory));
         const onboardingSeen = localStorage.getItem('civic-sense-guru-onboarding-seen'); if (!onboardingSeen) setShowOnboarding(true);
+        const savedPins = localStorage.getItem('civic-sense-guru-pinned-messages'); if(savedPins) setPinnedMessages(JSON.parse(savedPins));
+        const savedVoiceSettings = localStorage.getItem('civic-sense-guru-voice-settings'); if(savedVoiceSettings) setVoiceSettings(JSON.parse(savedVoiceSettings));
     } catch (e) { console.error("Failed to load from localStorage:", e); }
   }, []);
 
@@ -203,10 +234,15 @@ const App = () => {
   }, [history]);
 
   useEffect(() => {
+    try { localStorage.setItem('civic-sense-guru-pinned-messages', JSON.stringify(pinnedMessages)); } 
+    catch (e) { console.error("Failed to save pinned messages:", e); }
+  }, [pinnedMessages]);
+
+  useEffect(() => {
     if (!currentConversationId || transcript.length === 0) return;
     const update = (prev) => {
       const exists = prev.some(c => c.id === currentConversationId);
-      const title = transcript[0].text.slice(0, 40) + (transcript[0].text.length > 40 ? '...' : '');
+      const title = transcript.find(m => m.speaker === 'user')?.text.slice(0, 40) + '...' || 'New Chat';
       if (!exists) {
         const newConversation = { id: currentConversationId, timestamp: Date.now(), title, messages: transcript };
         return [newConversation, ...prev];
@@ -225,17 +261,19 @@ const App = () => {
     if (inputAudioContextRef.current?.state !== 'closed') { inputAudioContextRef.current?.close().catch(console.error); inputAudioContextRef.current = null; }
     recognitionRef.current?.stop(); recognitionRef.current = null;
     streamRef.current?.getTracks().forEach(track => track.stop()); streamRef.current = null;
-    if (outputAudioContextRef.current?.state !== 'closed') { outputAudioContextRef.current?.close().catch(console.error); outputAudioContextRef.current = null; }
+    if (outputAudioContextRef.current?.state !== 'closed') { outputAudioContextRef.current?.close().catch(console.error); outputAudioContextRef.current = null; gainNodeRef.current = null; }
     audioSourcesRef.current.forEach(source => source.stop()); audioSourcesRef.current.clear();
   }, []);
 
   const startNewConversation = useCallback(() => {
+    if (transcript.length > 0 && !window.confirm(content[language].startNewConversationConfirm)) return;
     disconnect();
     setCurrentConversationId(null);
     setTranscript([]);
     setError(null);
     setIsHistoryOpen(false);
-  }, [disconnect]);
+    addToast('New conversation started', 'success');
+  }, [disconnect, language, transcript.length]);
 
   const loadConversation = useCallback((id) => {
     disconnect();
@@ -257,6 +295,28 @@ const App = () => {
   const handleLanguageChange = (lang) => { setLanguage(lang); startNewConversation(); };
   const handleModeChange = (newMode) => { setMode(newMode); startNewConversation(); };
   
+  const playAudio = async (base64Audio) => {
+    let outputCtx = outputAudioContextRef.current;
+    if (!outputCtx || outputCtx.state === 'closed') {
+      outputCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      outputAudioContextRef.current = outputCtx;
+    }
+
+    if(!gainNodeRef.current || gainNodeRef.current.context !== outputCtx) {
+        gainNodeRef.current = outputCtx.createGain();
+        gainNodeRef.current.connect(outputCtx.destination);
+    }
+    gainNodeRef.current.gain.value = voiceSettings.volume;
+
+    const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
+    const sourceNode = outputCtx.createBufferSource();
+    sourceNode.buffer = audioBuffer;
+    sourceNode.playbackRate.value = voiceSettings.rate;
+    // Note: pitch is implicitly handled by playbackRate in Web Audio API
+    sourceNode.connect(gainNodeRef.current);
+    return sourceNode;
+  }
+
   const processUserTurn = useCallback(async (userText) => {
     lastUserMessageRef.current = userText;
     setSessionState('processing');
@@ -282,15 +342,7 @@ const App = () => {
       });
       const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
-          let outputCtx = outputAudioContextRef.current;
-          if (!outputCtx || outputCtx.state === 'closed') {
-              outputCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-              outputAudioContextRef.current = outputCtx;
-          }
-          const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
-          const sourceNode = outputCtx.createBufferSource();
-          sourceNode.buffer = audioBuffer;
-          sourceNode.connect(outputCtx.destination);
+          const sourceNode = await playAudio(base64Audio);
           sourceNode.start();
           sourceNode.onended = () => { 
             if (statusRef.current === 'speaking') {
@@ -302,9 +354,10 @@ const App = () => {
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : content[language].errorSession);
+      addToast(err instanceof Error ? err.message : content[language].errorSession, 'error');
       setSessionState('idle'); setIsThinking(false);
     }
-  }, [language, mode]);
+  }, [language, mode, voiceSettings]);
 
   const startLiveConversation = useCallback(async () => {
     setError(null);
@@ -314,6 +367,10 @@ const App = () => {
         streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
         inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        gainNodeRef.current = outputAudioContextRef.current.createGain();
+        gainNodeRef.current.gain.value = voiceSettings.volume;
+        gainNodeRef.current.connect(outputAudioContextRef.current.destination);
+
         nextStartTimeRef.current = 0;
         audioSourcesRef.current.clear();
         if (!aiRef.current) throw new Error("AI Client not initialized");
@@ -347,15 +404,12 @@ const App = () => {
                     if (base64Audio) {
                         setSessionState('speaking');
                         const outputCtx = outputAudioContextRef.current;
-                        if (!outputCtx || outputCtx.state === 'closed') {
+                         if (!outputCtx || outputCtx.state === 'closed') {
                             console.warn('Audio context closed during live session, skipping audio playback.');
                             return;
                         }
                         nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
-                        const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
-                        const source = outputCtx.createBufferSource();
-                        source.buffer = audioBuffer;
-                        source.connect(outputCtx.destination);
+                        const source = await playAudio(base64Audio);
                         
                         source.addEventListener('ended', () => {
                             audioSourcesRef.current.delete(source);
@@ -365,11 +419,11 @@ const App = () => {
                         });
                         
                         source.start(nextStartTimeRef.current);
-                        nextStartTimeRef.current += audioBuffer.duration;
+                        nextStartTimeRef.current += source.buffer.duration / voiceSettings.rate;
                         audioSourcesRef.current.add(source);
                     }
                 },
-                onerror: (e: ErrorEvent) => { console.error('Session error:', e); setError(content[language].errorSession); disconnect(); },
+                onerror: (e: ErrorEvent) => { console.error('Session error:', e); setError(content[language].errorSession); addToast(content[language].errorSession, 'error'); disconnect(); },
                 onclose: () => { disconnect(); }
             }
         });
@@ -377,9 +431,10 @@ const App = () => {
     } catch (err) {
         console.error('Failed to start live session:', err);
         setError(err instanceof Error ? err.message : content[language].errorStart);
+        addToast(err instanceof Error ? err.message : content[language].errorStart, 'error');
         disconnect();
     }
-  }, [disconnect, language, mode]);
+  }, [disconnect, language, voiceSettings]);
   
   const startTurnBasedConversation = useCallback(async (initialText = '') => {
     if (!SpeechRecognitionAPI) { setError(content[language].errorBrowserSupport); return; }
@@ -450,14 +505,42 @@ const App = () => {
   };
 
   const handleDownloadChat = () => {
-    const content = transcript.map(m => `${m.speaker === 'user' ? 'User' : 'Guru'} (${new Date(m.timestamp).toLocaleTimeString()}): ${m.text}`).join('\n\n');
-    const blob = new Blob([content], { type: 'text/plain' });
+    const content = transcript.map(m => `[${new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}] ${m.speaker === 'user' ? 'User' : 'Guru'}: ${m.text}`).join('\n\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `civic-sense-guru-chat-${new Date().toISOString()}.txt`;
+    a.download = `civic-sense-chat-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    addToast('Chat exported successfully!', 'success');
+  };
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href)
+      .then(() => addToast('Link copied to clipboard!', 'success'))
+      .catch(() => addToast('Failed to copy link.', 'error'));
+  };
+
+  const handlePinMessage = (message: TranscriptMessage) => {
+    if (pinnedMessages.length >= 10) {
+      addToast('You can only pin up to 10 messages.', 'error');
+      return;
+    }
+    if (pinnedMessages.some(p => p.timestamp === message.timestamp)) {
+        addToast('Message already pinned.', 'info');
+        return;
+    }
+    const newPin: PinnedMessage = { ...message, pinnedAt: Date.now() };
+    setPinnedMessages(prev => [...prev, newPin].sort((a,b) => b.pinnedAt - a.pinnedAt));
+    addToast('Message pinned!', 'success');
+  };
+
+  const handleUnpinMessage = (timestamp: number) => {
+    setPinnedMessages(prev => prev.filter(p => p.timestamp !== timestamp));
+    addToast('Message unpinned.', 'success');
   };
 
   const handleRetry = () => {
@@ -486,7 +569,6 @@ const App = () => {
   
   const currentContent = content[language][mode];
   const isTransacting = sessionState !== 'idle';
-  const isListening = sessionState === 'live' || sessionState === 'recording';
   const topicContent = content[language].topics;
   const topics = [
       { id: 'traffic', icon: TrafficIcon, text: topicContent.traffic },
@@ -505,11 +587,138 @@ const App = () => {
     speaking: 'bg-gradient-to-br from-purple-500 to-fuchsia-600',
   };
 
+  const ToastContainer = () => (
+    <div className="fixed top-5 right-5 z-[100] space-y-2">
+      {toasts.map(toast => (
+        <div key={toast.id} className={`flex items-center gap-3 px-4 py-2 rounded-lg shadow-lg text-white animate-slideInUp ${
+          toast.type === 'success' ? 'bg-green-500' :
+          toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+        }`}>
+          <span>{toast.message}</span>
+          <button onClick={() => setToasts(p => p.filter(t => t.id !== toast.id))}><CloseIcon c="w-4 h-4" /></button>
+        </div>
+      ))}
+    </div>
+  );
+
+  const VoiceSettingsModal = ({ isOpen, onClose }) => {
+    const [localSettings, setLocalSettings] = useState(voiceSettings);
+    useEffect(() => setLocalSettings(voiceSettings), [isOpen]);
+
+    const handleSave = () => {
+        setVoiceSettings(localSettings);
+        localStorage.setItem('civic-sense-guru-voice-settings', JSON.stringify(localSettings));
+        addToast('Settings saved!', 'success');
+        onClose();
+    };
+
+    const handleReset = () => {
+        const defaults = { rate: 1.0, pitch: 1.0, volume: 0.8 };
+        setLocalSettings(defaults);
+    };
+
+    const handleTest = async () => {
+        if (!aiRef.current) return;
+        addToast('Generating test audio...', 'info');
+        const ttsResponse = await aiRef.current.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts", contents: [{ parts: [{ text: "This is a test of the current voice settings." }] }], config: { responseModalities: [Modality.AUDIO] }
+        });
+        const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if(base64Audio) {
+            // Temporarily use local settings for playback test
+            const tempGainValue = gainNodeRef.current?.gain.value;
+            const tempRateValue = audioSourcesRef.current.values().next().value?.playbackRate.value;
+            
+            let outputCtx = outputAudioContextRef.current;
+            if (!outputCtx || outputCtx.state === 'closed') {
+              outputCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+              outputAudioContextRef.current = outputCtx;
+            }
+             if(!gainNodeRef.current || gainNodeRef.current.context !== outputCtx) {
+                gainNodeRef.current = outputCtx.createGain();
+                gainNodeRef.current.connect(outputCtx.destination);
+            }
+            gainNodeRef.current.gain.value = localSettings.volume;
+            const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
+            const sourceNode = outputCtx.createBufferSource();
+            sourceNode.buffer = audioBuffer;
+            sourceNode.playbackRate.value = localSettings.rate;
+            sourceNode.connect(gainNodeRef.current);
+            sourceNode.start();
+            sourceNode.onended = () => {
+                if (tempGainValue !== undefined) gainNodeRef.current.gain.value = tempGainValue;
+            };
+        }
+    };
+
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fadeIn" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 text-left animate-slideInUp" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">Voice Settings</h2>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700"><CloseIcon c="w-5 h-5" /></button>
+                </div>
+                <div className="space-y-6">
+                    <div>
+                        <label htmlFor="rate" className="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300"><span>Speaking Speed</span><span>{localSettings.rate.toFixed(1)}x</span></label>
+                        <input id="rate" type="range" min="0.5" max="2.0" step="0.1" value={localSettings.rate} onChange={e => setLocalSettings(s => ({...s, rate: parseFloat(e.target.value)}))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700" />
+                    </div>
+                    <div>
+                        <label htmlFor="pitch" className="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300"><span>Voice Pitch</span><span>{localSettings.pitch.toFixed(1)}</span></label>
+                        <input id="pitch" type="range" min="0.5" max="2.0" step="0.1" value={localSettings.pitch} onChange={e => setLocalSettings(s => ({...s, pitch: parseFloat(e.target.value)}))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700" />
+                    </div>
+                    <div>
+                        <label htmlFor="volume" className="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300"><span>Volume</span><span>{Math.round(localSettings.volume * 100)}%</span></label>
+                        <input id="volume" type="range" min="0" max="1" step="0.01" value={localSettings.volume} onChange={e => setLocalSettings(s => ({...s, volume: parseFloat(e.target.value)}))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700" />
+                    </div>
+                </div>
+                <div className="mt-8 flex gap-3">
+                    <button onClick={handleReset} className="w-full px-4 py-2 rounded-lg font-semibold bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors">Reset</button>
+                    <button onClick={handleTest} className="w-full px-4 py-2 rounded-lg font-semibold bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors">Test</button>
+                    <button onClick={handleSave} className="w-full px-4 py-2 rounded-lg font-semibold bg-blue-500 text-white hover:bg-blue-600 transition-colors">Apply</button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+  
+   const PinnedMessagesPanel = ({ isOpen, onClose }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-300 animate-fadeIn" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-lg w-full h-[70vh] flex flex-col p-6 text-left animate-slideInUp" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4 flex-shrink-0">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">Pinned Messages</h2>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700"><CloseIcon c="w-5 h-5" /></button>
+                </div>
+                <div className="flex-1 overflow-y-auto pr-2">
+                    {pinnedMessages.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-gray-500">No messages pinned yet.</div>
+                    ) : (
+                        <div className="space-y-4">
+                            {pinnedMessages.map(msg => (
+                                <div key={msg.timestamp} className="bg-gray-100 dark:bg-slate-700 p-4 rounded-lg">
+                                    <p className="text-gray-800 dark:text-gray-200">{msg.text}</p>
+                                    <div className="flex justify-between items-center mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <span>Pinned on {new Date(msg.pinnedAt).toLocaleDateString()}</span>
+                                        <button onClick={() => handleUnpinMessage(msg.timestamp)} className="text-red-500 hover:underline">Unpin</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   return (
     <>
      <style>{`
-        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
-        .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
         .animate-pulse-logo { animation: pulse 2.5s infinite; }
         @keyframes breathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(0,0,0,0.2); } 50% { transform: scale(1.03); box-shadow: 0 10px 25px rgba(0,0,0,0.3); } }
@@ -518,7 +727,7 @@ const App = () => {
         .animate-slideInUp { animation: slideInUp 0.5s ease-out forwards; }
         .slide-in-stagger > * { animation-delay: calc(var(--stagger-index) * 80ms); }
      `}</style>
-    <div className={`flex h-screen w-screen font-sans transition-colors duration-500 overflow-hidden ${theme === 'light' ? 'bg-gradient-to-br from-white to-sky-100 text-gray-900' : 'bg-gradient-to-br from-slate-900 to-slate-800 text-gray-200'}`}>
+    <div className={`flex h-screen w-screen font-sans transition-colors duration-500 overflow-hidden ${theme === 'light' ? 'bg-gradient-to-br from-white to-sky-100 text-[#1e293b]' : 'bg-gradient-to-br from-slate-900 to-slate-800 text-gray-200'}`}>
       <aside className={`absolute lg:relative z-40 h-full w-72 bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg border-r border-gray-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col ${isHistoryOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-800 flex-shrink-0">
               <h2 className="text-xl font-bold">History</h2>
@@ -526,7 +735,7 @@ const App = () => {
           </div>
           <div className="flex-1 overflow-y-auto">
               {history.sort((a,b) => b.timestamp - a.timestamp).map(c => (
-                  <button key={c.id} onClick={() => loadConversation(c.id)} className={`w-full text-left px-4 py-3 truncate transition-colors ${currentConversationId === c.id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-gray-200 dark:hover:bg-slate-800'}`}>
+                  <button key={c.id} onClick={() => loadConversation(c.id)} className={`w-full text-left px-4 py-3 truncate transition-colors ${currentConversationId === c.id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-gray-100 dark:hover:bg-slate-800'}`}>
                       <p className="font-semibold text-gray-800 dark:text-gray-200">{c.title}</p>
                       <p className="text-xs text-gray-500">{new Date(c.timestamp).toLocaleString()}</p>
                   </button>
@@ -577,10 +786,13 @@ const App = () => {
               {transcript.map((msg, index) => (
                 <div key={index} className={`flex items-end gap-3 animate-slideInUp ${msg.speaker === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.speaker === 'model' && <AiIcon />}
-                  <div className={`relative group max-w-md lg:max-w-xl px-4 py-3 rounded-2xl shadow-md ${msg.speaker === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-white text-gray-900 dark:bg-slate-700 dark:text-white rounded-bl-none'}`}>
+                  <div className={`relative group max-w-md lg:max-w-xl px-4 py-3 rounded-2xl shadow-md ${msg.speaker === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-slate-800 dark:bg-slate-700 dark:text-white rounded-bl-none'}`}>
                     <p className={!msg.isFinal ? 'opacity-70' : ''}>{msg.text}</p>
-                    <span className="text-xs opacity-60 mt-1 block text-right">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    <button onClick={() => navigator.clipboard.writeText(msg.text)} className="absolute -top-2 -right-2 p-1.5 bg-gray-300 dark:bg-slate-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity active:scale-95"><CopyIcon c="w-4 h-4" /></button>
+                    <span className={`text-xs mt-1 block text-right ${msg.speaker === 'user' ? 'text-blue-200' : 'text-gray-500 dark:text-gray-400'}`}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <div className="absolute -top-3 -right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {msg.speaker === 'model' && <button onClick={() => handlePinMessage(msg)} className="p-1.5 bg-gray-300 dark:bg-slate-600 rounded-full active:scale-95"><PinIcon c="w-4 h-4" /></button>}
+                      <button onClick={() => navigator.clipboard.writeText(msg.text)} className="p-1.5 bg-gray-300 dark:bg-slate-600 rounded-full active:scale-95"><CopyIcon c="w-4 h-4" /></button>
+                    </div>
                   </div>
                    {msg.speaker === 'user' && <UserIcon />}
                 </div>
@@ -609,11 +821,12 @@ const App = () => {
           </div>
         </footer>
       </div>
-      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-3">
-          <button onClick={startNewConversation} title="New Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><NewChatIcon c="w-6 h-6" /></button>
+      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-4">
+          <button onClick={() => setIsSettingsOpen(true)} title="Voice Settings" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><SettingsIcon c="w-6 h-6" /></button>
+          <button onClick={() => setIsPinnedPanelOpen(true)} title="Pinned Messages" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><PinnedIcon c="w-6 h-6" /></button>
+          <button onClick={handleShare} title="Share Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><ShareIcon c="w-6 h-6" /></button>
           <button onClick={handleDownloadChat} disabled={transcript.length === 0} title="Export Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"><DownloadIcon c="w-6 h-6" /></button>
-          <button title="Share (Coming Soon)" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><ShareIcon c="w-6 h-6" /></button>
-          <button title="Bookmark (Coming Soon)" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><BookmarkIcon c="w-6 h-6" /></button>
+          <button onClick={startNewConversation} title="New Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><NewChatIcon c="w-6 h-6" /></button>
       </div>
 
        {showOnboarding && (
@@ -649,6 +862,9 @@ const App = () => {
           </div>
         </div>
       )}
+      <ToastContainer />
+      <VoiceSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <PinnedMessagesPanel isOpen={isPinnedPanelOpen} onClose={() => setIsPinnedPanelOpen(false)} />
     </div>
     </>
   );
