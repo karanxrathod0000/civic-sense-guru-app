@@ -1,0 +1,7 @@
+{
+  "name": "Civic Sense Guru",
+  "description": "Have real-time voice conversations with an AI to learn about Indian civic sense, public etiquette, and responsible citizenship.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
