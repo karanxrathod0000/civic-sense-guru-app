@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import type { TranscriptMessage, Conversation } from './types';
+import type { TranscriptMessage, Conversation, TopicId, LearningProgress, StreakData, Badge, UserProfile, LeaderboardEntry } from './types';
 import { createBlob, decode, decodeAudioData } from './utils/audioUtils';
 
 // Minimal type definitions for Web Speech API
@@ -23,6 +23,7 @@ const content = {
     statusConnecting: 'Connecting...',
     statusListening: 'Listening...',
     statusRecording: 'Recording...',
+    statusConfirming: 'Ready to send...',
     statusProcessing: 'Processing...',
     statusAnalyzing: 'Analyzing...',
     statusGeneratingAudio: 'Generating audio...',
@@ -58,6 +59,7 @@ const content = {
     statusConnecting: 'कनेक्ट हो रहा है...',
     statusListening: 'सुन रहा हूँ...',
     statusRecording: 'रिकॉर्डिंग...',
+    statusConfirming: 'भेजने के लिए तैयार...',
     statusProcessing: 'प्रोसेस हो रहा है...',
     statusAnalyzing: 'विश्लेषण हो रहा है...',
     statusGeneratingAudio: 'ऑडियो बन रहा है...',
@@ -100,7 +102,7 @@ const systemInstructions = {
 };
 
 type Mode = 'standard' | 'quick' | 'deep';
-type SessionState = 'idle' | 'connecting' | 'live' | 'recording' | 'processing' | 'speaking';
+type SessionState = 'idle' | 'connecting' | 'live' | 'recording' | 'confirming' | 'processing' | 'speaking';
 type Theme = 'light' | 'dark';
 interface PinnedMessage extends TranscriptMessage { pinnedAt: number; }
 interface VoiceSettings { rate: number; pitch: number; volume: number; }
@@ -129,8 +131,10 @@ const PinnedIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/s
 const CopyIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
 const ChevronDownIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>;
 const SearchIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>;
-const SettingsIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" /></svg>;
+const SettingsIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69-.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59-1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" /></svg>;
 const CloseIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>;
+const SendIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>;
+const MoreVertIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>;
 
 
 const App = () => {
@@ -147,23 +151,32 @@ const App = () => {
   const [sessionState, setSessionState] = useState<SessionState>('idle');
   const [isThinking, setIsThinking] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   
   const [history, setHistory] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pinnedMessages, setPinnedMessages] = useState<PinnedMessage[]>([]);
   const [isPinnedPanelOpen, setIsPinnedPanelOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({ rate: 1.0, pitch: 1.0, volume: 0.8 });
   
+  // New Gamification State
+  const [profile, setProfile] = useState<UserProfile>({ username: 'Anonymous_User', points: 0 });
+  const [streakData, setStreakData] = useState<StreakData>({ current: 0, longest: 0, lastVisit: new Date(0).toISOString() });
+  const [learningProgress, setLearningProgress] = useState<LearningProgress>({ traffic: { completed: 0, total: 10 }, hygiene: { completed: 0, total: 10 }, waste: { completed: 0, total: 10 }, transport: { completed: 0, total: 10 }, democracy: { completed: 0, total: 10 } });
+  const [badges, setBadges] = useState<Badge[]>([]);
+
   const aiRef = useRef<GoogleGenAI | null>(null);
   const sessionRef = useRef<any | null>(null); 
   const streamRef = useRef<MediaStream | null>(null);
@@ -173,6 +186,7 @@ const App = () => {
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const headerMenuRef = useRef<HTMLDivElement | null>(null);
   
   const nextStartTimeRef = useRef(0);
   const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
@@ -189,6 +203,19 @@ const App = () => {
   };
 
   useEffect(() => { statusRef.current = sessionState; }, [sessionState]);
+  
+  // Scroll effects
+  useEffect(() => {
+    const container = transcriptContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        setShowScrollDown(!isAtBottom);
+        setIsScrolled(container.scrollTop > 10);
+      };
+      container.addEventListener('scroll', handleScroll, { passive: true });
+      return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const container = transcriptContainerRef.current;
@@ -197,12 +224,6 @@ const App = () => {
       if (isScrolledToBottom) {
         container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
       }
-      const handleScroll = () => {
-        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-        setShowScrollDown(!isAtBottom);
-      };
-      container.addEventListener('scroll', handleScroll);
-      return () => container.removeEventListener('scroll', handleScroll);
     }
   }, [transcript, isThinking, error]);
   
@@ -218,33 +239,88 @@ const App = () => {
         aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
     }
   }, [language]);
+  
+  // Close header menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+        setIsHeaderMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
+  // Load user data from localStorage
   useEffect(() => {
     try {
         const savedHistory = localStorage.getItem('civic-sense-guru-history'); if (savedHistory) setHistory(JSON.parse(savedHistory));
         const onboardingSeen = localStorage.getItem('civic-sense-guru-onboarding-seen'); if (!onboardingSeen) setShowOnboarding(true);
         const savedPins = localStorage.getItem('civic-sense-guru-pinned-messages'); if(savedPins) setPinnedMessages(JSON.parse(savedPins));
         const savedVoiceSettings = localStorage.getItem('civic-sense-guru-voice-settings'); if(savedVoiceSettings) setVoiceSettings(JSON.parse(savedVoiceSettings));
+        
+        // Load gamification data
+        const savedProfile = localStorage.getItem('civic-sense-guru-profile'); if(savedProfile) setProfile(JSON.parse(savedProfile));
+        const savedStreak = localStorage.getItem('civic-sense-guru-streak'); if(savedStreak) setStreakData(JSON.parse(savedStreak));
+        const savedProgress = localStorage.getItem('civic-sense-guru-progress'); if(savedProgress) setLearningProgress(JSON.parse(savedProgress));
+        const savedBadges = localStorage.getItem('civic-sense-guru-badges'); if(savedBadges) setBadges(JSON.parse(savedBadges));
+        
     } catch (e) { console.error("Failed to load from localStorage:", e); }
   }, []);
+  
+  // Check and update streak
+   useEffect(() => {
+        const today = new Date();
+        const lastVisitDate = new Date(streakData.lastVisit);
+        const diffTime = today.getTime() - lastVisitDate.getTime();
+        const diffDays = diffTime / (1000 * 3600 * 24);
 
+        let newStreak = { ...streakData };
+        if (diffDays > 1 && diffDays < 2) { // Visited yesterday
+            newStreak.current += 1;
+        } else if (diffDays >= 2) { // Missed a day or more
+            newStreak.current = 1;
+        } else if (today.getDate() !== lastVisitDate.getDate()) { // First visit of a new day
+            newStreak.current = (newStreak.current || 0) + 1;
+        }
+
+        if(newStreak.current > newStreak.longest) {
+            newStreak.longest = newStreak.current;
+        }
+        
+        newStreak.lastVisit = today.toISOString();
+        if (newStreak.current !== streakData.current) {
+             setStreakData(newStreak);
+        }
+    }, []);
+
+  // Save data to localStorage
   useEffect(() => {
     try { localStorage.setItem('civic-sense-guru-history', JSON.stringify(history)); } 
     catch (e) { console.error("Failed to save history:", e); }
   }, [history]);
-
-  useEffect(() => {
+   useEffect(() => {
     try { localStorage.setItem('civic-sense-guru-pinned-messages', JSON.stringify(pinnedMessages)); } 
     catch (e) { console.error("Failed to save pinned messages:", e); }
   }, [pinnedMessages]);
+   useEffect(() => {
+    try {
+        localStorage.setItem('civic-sense-guru-profile', JSON.stringify(profile));
+        localStorage.setItem('civic-sense-guru-streak', JSON.stringify(streakData));
+        localStorage.setItem('civic-sense-guru-progress', JSON.stringify(learningProgress));
+        localStorage.setItem('civic-sense-guru-badges', JSON.stringify(badges));
+    } catch(e) { console.error("Failed to save gamification data:", e); }
+  }, [profile, streakData, learningProgress, badges]);
 
   useEffect(() => {
     if (!currentConversationId || transcript.length === 0) return;
     const update = (prev) => {
       const exists = prev.some(c => c.id === currentConversationId);
       const title = transcript.find(m => m.speaker === 'user')?.text.slice(0, 40) + '...' || 'New Chat';
+      const currentTopic = prev.find(c => c.id === currentConversationId)?.topicId;
+      
       if (!exists) {
-        const newConversation = { id: currentConversationId, timestamp: Date.now(), title, messages: transcript };
+        const newConversation = { id: currentConversationId, timestamp: Date.now(), title, messages: transcript, topicId: currentTopic };
         return [newConversation, ...prev];
       } else {
         return prev.map(c => c.id === currentConversationId ? { ...c, messages: transcript, title } : c);
@@ -254,7 +330,7 @@ const App = () => {
   }, [transcript, currentConversationId]);
 
   const disconnect = useCallback(() => {
-    setSessionState('idle'); setIsThinking(false); setSuggestions([]);
+    setSessionState('idle'); setIsThinking(false); setSuggestions([]); setInterimTranscript('');
     sessionRef.current?.close(); sessionRef.current = null;
     scriptProcessorRef.current?.disconnect(); scriptProcessorRef.current = null;
     mediaStreamSourceRef.current?.disconnect(); mediaStreamSourceRef.current = null;
@@ -271,7 +347,7 @@ const App = () => {
     setCurrentConversationId(null);
     setTranscript([]);
     setError(null);
-    setIsHistoryOpen(false);
+    setIsSidebarOpen(false);
     addToast('New conversation started', 'success');
   }, [disconnect, language, transcript.length]);
 
@@ -282,7 +358,7 @@ const App = () => {
       setCurrentConversationId(conversation.id);
       setTranscript(conversation.messages);
     }
-    setIsHistoryOpen(false);
+    setIsSidebarOpen(false);
   }, [history, disconnect]);
   
   const clearHistory = useCallback(() => {
@@ -441,7 +517,8 @@ const App = () => {
     if (!currentConversationId) setCurrentConversationId(Date.now().toString());
 
     if (initialText) {
-      setTranscript([{ speaker: 'user', text: initialText, isFinal: true, timestamp: Date.now() }]);
+      const userMessage: TranscriptMessage = { speaker: 'user', text: initialText, isFinal: true, timestamp: Date.now() };
+      setTranscript([userMessage]);
       await processUserTurn(initialText);
       return;
     }
@@ -453,14 +530,15 @@ const App = () => {
     recognitionRef.current = recognition;
 
     recognition.onresult = (event) => {
-      let finalTranscript = ''; let interimTranscript = '';
+      let finalTranscript = ''; let currentInterim = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-        else interimTranscript += event.results[i][0].transcript;
+        else currentInterim += event.results[i][0].transcript;
       }
+      setInterimTranscript(currentInterim);
       setTranscript(prev => {
         const newTranscript = [...prev]; const last = newTranscript[newTranscript.length - 1];
-        const text = (finalTranscript || interimTranscript).trim();
+        const text = (finalTranscript || currentInterim).trim();
         if (last?.speaker === 'user' && !last.isFinal) last.text = text;
         else if (text) newTranscript.push({ speaker: 'user', text, isFinal: false, timestamp: Date.now() });
         return newTranscript;
@@ -469,6 +547,7 @@ const App = () => {
     
     recognition.onend = async () => {
       recognitionRef.current = null;
+      setInterimTranscript('');
       setTranscript(prev => {
           const lastMsgIndex = prev.findLastIndex(m => m.speaker === 'user');
           if (lastMsgIndex === -1) { setSessionState('idle'); return prev; }
@@ -477,26 +556,43 @@ const App = () => {
           
           const finalTranscript = [...prev];
           finalTranscript[lastMsgIndex] = { ...lastMsg, isFinal: true, timestamp: Date.now() };
-          processUserTurn(lastMsg.text);
+          setSessionState('confirming');
           return finalTranscript;
       });
     };
     recognition.start();
   }, [language, currentConversationId, processUserTurn]);
 
+  const handleSendConfirmed = () => {
+    const lastUserMessage = transcript.findLast(m => m.speaker === 'user' && m.isFinal);
+    if(lastUserMessage) {
+        processUserTurn(lastUserMessage.text);
+    }
+  };
+
   const handleSuggestionClick = (suggestion) => {
       if (sessionState !== 'idle') return;
       startTurnBasedConversation(suggestion);
   };
   
-  const handleTopicClick = (topic) => {
+  const handleTopicClick = (topicId: TopicId, topicText: string) => {
     if (sessionState !== 'idle') disconnect();
-    const prompt = language === 'hi' ? `मुझे ${topic} के बारे में बताएं` : `Tell me about ${topic}`;
+    const newConvId = Date.now().toString();
+    setCurrentConversationId(newConvId);
+    setHistory(prev => [{
+        id: newConvId,
+        timestamp: Date.now(),
+        title: topicText,
+        messages: [],
+        topicId: topicId,
+    },...prev.filter(c => c.id !== newConvId)]);
+    const prompt = language === 'hi' ? `मुझे ${topicText} के बारे में बताएं` : `Tell me about ${topicText}`;
     startTurnBasedConversation(prompt);
   };
   
   const handleButtonClick = () => {
-    if (sessionState !== 'idle') { disconnect(); } 
+    if (sessionState !== 'idle' && sessionState !== 'confirming') { disconnect(); } 
+    else if(sessionState === 'confirming') { handleSendConfirmed(); }
     else {
       if (!currentConversationId) setCurrentConversationId(Date.now().toString());
       if (mode === 'standard') startLiveConversation();
@@ -557,6 +653,7 @@ const App = () => {
         case 'live': return content[language].statusListening;
         case 'speaking': return content[language].statusSpeaking;
         case 'recording': return content[language].statusRecording;
+        case 'confirming': return content[language].statusConfirming;
         case 'processing': return content[language].statusAnalyzing;
         default: return content[language].statusIdle;
     }
@@ -570,19 +667,20 @@ const App = () => {
   const currentContent = content[language][mode];
   const isTransacting = sessionState !== 'idle';
   const topicContent = content[language].topics;
-  const topics = [
-      { id: 'traffic', icon: TrafficIcon, text: topicContent.traffic },
-      { id: 'hygiene', icon: HygieneIcon, text: topicContent.hygiene },
-      { id: 'waste', icon: WasteIcon, text: topicContent.waste },
-      { id: 'transport', icon: TransportIcon, text: topicContent.transport },
-      { id: 'democracy', icon: DemocracyIcon, text: topicContent.democracy },
-  ];
+  const topics: { id: TopicId; icon: React.FC<{c: string}>; text: string; gradient: string }[] = useMemo(() => [
+      { id: 'traffic', icon: TrafficIcon, text: topicContent.traffic, gradient: 'from-[#667eea] to-[#764ba2]' },
+      { id: 'hygiene', icon: HygieneIcon, text: topicContent.hygiene, gradient: 'from-[#f093fb] to-[#f5576c]' },
+      { id: 'waste', icon: WasteIcon, text: topicContent.waste, gradient: 'from-[#fa709a] to-[#fee140]' },
+      { id: 'transport', icon: TransportIcon, text: topicContent.transport, gradient: 'from-[#43e97b] to-[#38f9d7]' },
+      { id: 'democracy', icon: DemocracyIcon, text: topicContent.democracy, gradient: 'from-[#4facfe] to-[#00f2fe]' },
+  ], [topicContent]);
 
   const MicStateClasses = {
     idle: 'bg-gradient-to-br from-blue-500 to-indigo-600',
     connecting: 'bg-gradient-to-br from-yellow-400 to-amber-500',
     live: 'bg-gradient-to-br from-green-400 to-emerald-500',
     recording: 'bg-gradient-to-br from-green-400 to-emerald-500',
+    confirming: 'bg-gradient-to-br from-teal-400 to-cyan-500',
     processing: 'bg-gradient-to-br from-yellow-400 to-amber-500',
     speaking: 'bg-gradient-to-br from-purple-500 to-fuchsia-600',
   };
@@ -625,10 +723,6 @@ const App = () => {
         });
         const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if(base64Audio) {
-            // Temporarily use local settings for playback test
-            const tempGainValue = gainNodeRef.current?.gain.value;
-            const tempRateValue = audioSourcesRef.current.values().next().value?.playbackRate.value;
-            
             let outputCtx = outputAudioContextRef.current;
             if (!outputCtx || outputCtx.state === 'closed') {
               outputCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -638,6 +732,7 @@ const App = () => {
                 gainNodeRef.current = outputCtx.createGain();
                 gainNodeRef.current.connect(outputCtx.destination);
             }
+            const tempGain = gainNodeRef.current.gain.value;
             gainNodeRef.current.gain.value = localSettings.volume;
             const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
             const sourceNode = outputCtx.createBufferSource();
@@ -646,7 +741,7 @@ const App = () => {
             sourceNode.connect(gainNodeRef.current);
             sourceNode.start();
             sourceNode.onended = () => {
-                if (tempGainValue !== undefined) gainNodeRef.current.gain.value = tempGainValue;
+                gainNodeRef.current.gain.value = tempGain;
             };
         }
     };
@@ -725,33 +820,63 @@ const App = () => {
         .animate-breathe { animation: breathe 4s ease-in-out infinite; }
         @keyframes slideInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
         .animate-slideInUp { animation: slideInUp 0.5s ease-out forwards; }
-        .slide-in-stagger > * { animation-delay: calc(var(--stagger-index) * 80ms); }
+        .slide-in-stagger > * { animation-delay: calc(var(--stagger-index) * 100ms); }
      `}</style>
     <div className={`flex h-screen w-screen font-sans transition-colors duration-500 overflow-hidden ${theme === 'light' ? 'bg-gradient-to-br from-white to-sky-100 text-[#1e293b]' : 'bg-gradient-to-br from-slate-900 to-slate-800 text-gray-200'}`}>
-      <aside className={`absolute lg:relative z-40 h-full w-72 bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg border-r border-gray-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col ${isHistoryOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-30 lg:hidden animate-fadeIn"></div>}
+      
+      <aside className={`absolute lg:relative z-40 h-full w-72 bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg border-r border-gray-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-800 flex-shrink-0">
-              <h2 className="text-xl font-bold">History</h2>
-              <button onClick={startNewConversation} className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 text-sm font-semibold active:scale-95 transition-all">New Chat</button>
+              <h2 className="text-xl font-bold">Profile</h2>
+              <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 lg:hidden active:scale-95 transition-transform">
+                  <CloseIcon c="w-6 h-6" />
+              </button>
           </div>
+
+          <div className="p-4 border-b border-gray-200 dark:border-slate-800 flex-shrink-0">
+              <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                      {profile.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{profile.username}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{profile.points} points</p>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-400 font-semibold mt-1">🔥 {streakData.current}-day streak!</p>
+                  </div>
+              </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 flex-shrink-0">
+              <h3 className="font-semibold text-gray-600 dark:text-gray-300">Conversation History</h3>
+              <button onClick={startNewConversation} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">New Chat</button>
+          </div>
+
           <div className="flex-1 overflow-y-auto">
-              {history.sort((a,b) => b.timestamp - a.timestamp).map(c => (
-                  <button key={c.id} onClick={() => loadConversation(c.id)} className={`w-full text-left px-4 py-3 truncate transition-colors ${currentConversationId === c.id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-gray-100 dark:hover:bg-slate-800'}`}>
-                      <p className="font-semibold text-gray-800 dark:text-gray-200">{c.title}</p>
-                      <p className="text-xs text-gray-500">{new Date(c.timestamp).toLocaleString()}</p>
-                  </button>
-              ))}
+            {history.length > 0 ? (
+                history.sort((a, b) => b.timestamp - a.timestamp).map(c => (
+                    <button key={c.id} onClick={() => loadConversation(c.id)} className={`w-full text-left px-4 py-3 truncate transition-colors ${currentConversationId === c.id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-gray-100 dark:hover:bg-slate-800'}`}>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">{c.title}</p>
+                        <p className="text-xs text-gray-500">{new Date(c.timestamp).toLocaleString()}</p>
+                    </button>
+                ))
+            ) : (
+              <div className="px-4 py-8 text-center text-sm text-gray-500">
+                  No conversations yet.
+              </div>
+            )}
           </div>
+
           <div className="p-4 border-t border-gray-200 dark:border-slate-800 flex-shrink-0">
-              <button onClick={clearHistory} className="w-full text-center p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95 transition-colors">Clear History</button>
+              <button onClick={clearHistory} disabled={history.length === 0} className="w-full text-center p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Clear History</button>
           </div>
       </aside>
 
       <div className="flex flex-col flex-1 relative">
-        <header className="p-3 flex justify-between items-center gap-4 border-b border-gray-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 z-20">
+        <header className={`p-3 flex justify-between items-center gap-4 border-b bg-white/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 z-20 transition-shadow duration-300 ${isScrolled ? 'shadow-md border-gray-200/80 dark:border-slate-800/80' : 'border-transparent'}`}>
           <div className="flex items-center gap-2">
-            <button onClick={() => setIsHistoryOpen(!isHistoryOpen)} className="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-slate-800 lg:hidden active:scale-95 transition-transform"><MenuIcon c="w-6 h-6"/></button>
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-slate-800 lg:hidden active:scale-95 transition-transform"><MenuIcon c="w-6 h-6"/></button>
             <div className="flex items-center gap-2">
-                <div className="text-2xl animate-pulse-logo">🇮🇳</div>
+                <div className="text-3xl animate-pulse-logo">🇮🇳</div>
                 <div>
                     <h1 className="text-xl font-bold text-gray-900 dark:text-white">{currentContent.title}</h1>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{currentContent.description}</p>
@@ -759,17 +884,36 @@ const App = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-              <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-200 dark:bg-slate-900 rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-slate-700">
-                  {(['standard', 'quick', 'deep'] as Mode[]).map(m => <button key={m} onClick={() => handleModeChange(m)} disabled={isTransacting} className={`px-3 py-1 rounded-md text-sm font-semibold transition-all capitalize ${mode === m ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>{m}</button>)}
-              </div>
-              <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-200 dark:bg-slate-900 rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-slate-700">
-                  <button onClick={() => handleLanguageChange('en')} disabled={isTransacting} className={`px-2 py-1 rounded-md text-sm font-semibold transition-all ${language === 'en' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>EN</button>
-                  <button onClick={() => handleLanguageChange('hi')} disabled={isTransacting} className={`px-2 py-1 rounded-md text-sm font-semibold transition-all ${language === 'hi' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>HI</button>
-              </div>
-              <div className="flex items-center gap-2">
-                <button title="Search (Coming Soon)" className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95"><SearchIcon c="w-5 h-5" /></button>
-                <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95" aria-label="Toggle theme">{theme === 'dark' ? <SunIcon c="w-5 h-5" /> : <MoonIcon c="w-5 h-5" />}</button>
-                 <div className={`w-3 h-3 rounded-full transition-colors ${error ? 'bg-red-500' : (isTransacting ? 'bg-yellow-500 animate-pulse' : 'bg-green-500')}`} title={error ? 'Error' : (isTransacting ? 'Connected' : 'Idle')}></div>
+              <button title="Search (Coming Soon)" className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200/50 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95"><SearchIcon c="w-5 h-5" /></button>
+              <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200/50 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95" aria-label="Toggle theme">{theme === 'dark' ? <SunIcon c="w-5 h-5" /> : <MoonIcon c="w-5 h-5" />}</button>
+              <div className={`w-3 h-3 rounded-full transition-colors ${error ? 'bg-red-500' : (isTransacting ? 'bg-yellow-500 animate-pulse' : 'bg-green-500')}`} title={error ? 'Error' : (isTransacting ? 'Connected' : 'Idle')}></div>
+              
+              <div ref={headerMenuRef} className="relative">
+                  <button onClick={() => setIsHeaderMenuOpen(prev => !prev)} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200/50 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95">
+                      <MoreVertIcon c="w-5 h-5" />
+                  </button>
+                  {isHeaderMenuOpen && (
+                      <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-2xl ring-1 ring-black/5 z-50 p-2 animate-fadeIn">
+                          <div className="p-2">
+                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Mode</p>
+                              <div className="flex items-center gap-1 p-1 bg-gray-200 dark:bg-slate-900 rounded-lg">
+                                {(['standard', 'quick', 'deep'] as Mode[]).map(m => <button key={m} onClick={() => { handleModeChange(m); setIsHeaderMenuOpen(false); }} disabled={isTransacting} className={`w-full px-2 py-1 rounded-md text-sm font-semibold transition-all capitalize ${mode === m ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>{m}</button>)}
+                              </div>
+                          </div>
+                          <div className="p-2">
+                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Language</p>
+                              <div className="flex items-center gap-1 p-1 bg-gray-200 dark:bg-slate-900 rounded-lg">
+                                <button onClick={() => { handleLanguageChange('en'); setIsHeaderMenuOpen(false); }} disabled={isTransacting} className={`w-full px-2 py-1 rounded-md text-sm font-semibold transition-all ${language === 'en' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>English</button>
+                                <button onClick={() => { handleLanguageChange('hi'); setIsHeaderMenuOpen(false); }} disabled={isTransacting} className={`w-full px-2 py-1 rounded-md text-sm font-semibold transition-all ${language === 'hi' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>हिंदी</button>
+                              </div>
+                          </div>
+                          <div className="my-2 h-px bg-gray-200 dark:bg-slate-700"></div>
+                          <button onClick={() => { setIsPinnedPanelOpen(true); setIsHeaderMenuOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left rounded-md hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"><PinnedIcon c="w-5 h-5"/> Pinned Messages</button>
+                          <button onClick={() => { setIsSettingsOpen(true); setIsHeaderMenuOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left rounded-md hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"><SettingsIcon c="w-5 h-5"/> Voice Settings</button>
+                          <button onClick={() => { handleShare(); setIsHeaderMenuOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left rounded-md hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"><ShareIcon c="w-5 h-5"/> Share App</button>
+                          <button onClick={() => { handleDownloadChat(); setIsHeaderMenuOpen(false); }} disabled={transcript.length === 0} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left rounded-md hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"><DownloadIcon c="w-5 h-5"/> Download Chat</button>
+                      </div>
+                  )}
               </div>
           </div>
         </header>
@@ -806,29 +950,38 @@ const App = () => {
 
         <footer className="p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-lg border-t border-gray-200/50 dark:border-slate-800/50">
           <div className="flex flex-col items-center justify-center gap-4">
-            <div className="flex flex-wrap justify-center gap-2 mb-2 slide-in-stagger">
-              {transcript.length === 0 && !isTransacting ? topics.map((topic, i) => (<button key={topic.id} style={{ '--stagger-index': i }} onClick={() => handleTopicClick(topic.text)} disabled={isTransacting} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-800 rounded-full shadow-sm ring-1 ring-gray-200 dark:ring-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:-translate-y-1 active:scale-95 animate-slideInUp"><svg className="w-5 h-5" viewBox="0 0 24 24"><topic.icon c="text-[20px]" /></svg>{topic.text}</button>))
-              : suggestions.map((s, i) => <button key={i} style={{ '--stagger-index': i }} onClick={() => handleSuggestionClick(s)} className="px-3 py-2 text-sm font-medium bg-gray-200 dark:bg-slate-700 rounded-full hover:bg-gray-300 dark:hover:bg-slate-600 active:scale-95 transition-all animate-slideInUp">{s}</button>)
-              }
+             {sessionState === 'recording' && interimTranscript && (
+                <div className="w-full max-w-2xl mx-auto p-3 mb-2 rounded-lg bg-black/10 dark:bg-white/10 backdrop-blur-md text-center text-lg italic animate-fadeIn">
+                    {interimTranscript}
+                </div>
+             )}
+            <div className="flex flex-wrap justify-center gap-2 mb-2">
+              {transcript.length === 0 && !isTransacting ? (
+                <div className="flex flex-wrap justify-center gap-3 slide-in-stagger">
+                    {topics.map((topic, i) => (
+                        <button key={topic.id} style={{ '--stagger-index': i }} onClick={() => handleTopicClick(topic.id, topic.text)} disabled={isTransacting} 
+                        className={`flex items-center gap-3 px-4 py-3 text-sm font-bold text-white bg-gradient-to-br ${topic.gradient} rounded-xl shadow-lg hover:shadow-xl hover:scale-105 hover:-translate-y-1 active:scale-95 transition-all animate-slideInUp disabled:opacity-50 disabled:cursor-not-allowed`}>
+                            <div className="text-2xl"><topic.icon c="" /></div>
+                            {topic.text}
+                        </button>
+                    ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap justify-center gap-2 slide-in-stagger">
+                    {suggestions.map((s, i) => <button key={i} style={{ '--stagger-index': i }} onClick={() => handleSuggestionClick(s)} className="px-3 py-2 text-sm font-medium bg-gray-200 dark:bg-slate-700 rounded-full hover:bg-gray-300 dark:hover:bg-slate-600 active:scale-95 transition-all animate-slideInUp">{s}</button>)}
+                </div>
+              )}
             </div>
-            <div className="relative">
-              <button onClick={handleButtonClick} disabled={sessionState === 'connecting'} className={`relative w-24 h-24 rounded-full flex items-center justify-center text-white transition-all duration-300 ease-in-out shadow-xl transform active:scale-95 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-black ${MicStateClasses[sessionState]} ${sessionState === 'idle' ? 'animate-breathe' : ''}`}>{isTransacting ? <StopIcon c="w-10 h-10" /> : <MicIcon c="w-12 h-12" />}</button>
+            <div className="relative w-full max-w-xs flex justify-center items-center gap-4">
+              <button onClick={startNewConversation} title="New Chat" className="w-16 h-16 rounded-full bg-gray-200 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform text-gray-600 dark:text-gray-300"><NewChatIcon c="w-8 h-8" /></button>
+              <button onClick={handleButtonClick} disabled={sessionState === 'connecting'} className={`relative w-24 h-24 rounded-full flex items-center justify-center text-white transition-all duration-300 ease-in-out shadow-xl transform active:scale-95 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-black ${MicStateClasses[sessionState]} ${sessionState === 'idle' ? 'animate-breathe' : ''}`}>{sessionState === 'confirming' ? <SendIcon c="w-10 h-10" /> : (isTransacting ? <StopIcon c="w-10 h-10" /> : <MicIcon c="w-12 h-12" />)}</button>
+              <div className="w-16 h-16"></div>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium h-5">{getStatusText()}</p>
-             <div className="hidden sm:flex text-xs text-gray-400 dark:text-gray-500 items-center gap-4">
-                 <span>About</span><span>|</span><span>Help</span><span>|</span><span>Privacy</span><span className="font-bold">|</span><span>Made with ❤️ in India</span><span>|</span><span>v1.0.0</span>
-            </div>
           </div>
         </footer>
       </div>
-      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-4">
-          <button onClick={() => setIsSettingsOpen(true)} title="Voice Settings" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><SettingsIcon c="w-6 h-6" /></button>
-          <button onClick={() => setIsPinnedPanelOpen(true)} title="Pinned Messages" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><PinnedIcon c="w-6 h-6" /></button>
-          <button onClick={handleShare} title="Share Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><ShareIcon c="w-6 h-6" /></button>
-          <button onClick={handleDownloadChat} disabled={transcript.length === 0} title="Export Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"><DownloadIcon c="w-6 h-6" /></button>
-          <button onClick={startNewConversation} title="New Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><NewChatIcon c="w-6 h-6" /></button>
-      </div>
-
+      
        {showOnboarding && (
         <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 text-center animate-fadeIn">
@@ -844,13 +997,9 @@ const App = () => {
               <button onClick={() => setOnboardingStep(2)} className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-600 transition-colors">Next</button>
             </>}
              {onboardingStep === 2 && <>
-              <div className="flex justify-center gap-2 mb-4">
-                <span className="px-3 py-1 bg-gray-200 dark:bg-slate-700 rounded-full text-sm">Standard</span>
-                <span className="px-3 py-1 bg-gray-200 dark:bg-slate-700 rounded-full text-sm">Quick</span>
-                <span className="px-3 py-1 bg-gray-200 dark:bg-slate-700 rounded-full text-sm">Deep</span>
-              </div>
-              <h2 className="text-xl font-bold mb-2">Choose Your Mode</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-6">Switch between conversation modes or languages using the toggles in the header.</p>
+              <MoreVertIcon c="w-16 h-16 text-blue-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">Check the Options</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">Switch modes, change languages, and find more tools in the options menu at the top-right.</p>
               <button onClick={() => setOnboardingStep(3)} className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-600 transition-colors">Next</button>
             </>}
             {onboardingStep === 3 && <>
