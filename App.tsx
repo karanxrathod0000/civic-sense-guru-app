@@ -102,10 +102,10 @@ type ProcessingStep = 'idle' | 'generatingText' | 'generatingAudio';
 type Theme = 'light' | 'dark';
 
 // --- SVG Icons ---
-const MicIcon = ({ c }) => <svg className={c} xmlns="http://www.w.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1h2v1a5 5 0 0 0 10 0v-1z"></path><path d="M12 18.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2a.5.5 0 0 1 .5.5z"></path></svg>;
-const StopIcon = ({ c }) => <svg className={c} xmlns="http://www.w.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"></path></svg>;
-const AiIcon = () => <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md"><svg xmlns="http://www.w.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2zM6 8a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0v-2a2 2 0 0 0-2-2zm12 0a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0v-2a2 2 0 0 0-2-2zM7 15.222C7 14.547 7.547 14 8.222 14h7.556C16.453 14 17 14.547 17 15.222v2.556c0 .675-.547 1.222-1.222 1.222H8.222C7.547 19 7 18.453 7 17.778v-2.556z"/></svg></div>;
-const SunIcon = ({ c }) => <svg className={c} xmlns="http://www.w.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 5 5 5 5 0 0 0-5-5zM12 9a3 3 0 1 1-3 3 3 3 0 0 1 3-3zM12 2a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0V3a1 1 0 0 0-1-1zm0 18a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 4.22a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM18.36 18.36a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM2 12a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zm18 0a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 19.78a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41zM19.78 4.22a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41z"></path></svg>;
+const MicIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1h2v1a5 5 0 0 0 10 0v-1z"></path><path d="M12 18.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2a.5.5 0 0 1 .5.5z"></path></svg>;
+const StopIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"></path></svg>;
+const AiIcon = () => <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md"><svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2zM6 8a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0v-2a2 2 0 0 0-2-2zm12 0a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0v-2a2 2 0 0 0-2-2zM7 15.222C7 14.547 7.547 14 8.222 14h7.556C16.453 14 17 14.547 17 15.222v2.556c0 .675-.547 1.222-1.222 1.222H8.222C7.547 19 7 18.453 7 17.778v-2.556z"/></svg></div>;
+const SunIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 5 5 5 5 0 0 0-5-5zM12 9a3 3 0 1 1-3 3 3 3 0 0 1 3-3zM12 2a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0V3a1 1 0 0 0-1-1zm0 18a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 4.22a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM18.36 18.36a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM2 12a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zm18 0a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 19.78a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41zM19.78 4.22a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41z"></path></svg>;
 const MoonIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>;
 const MenuIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"></path></svg>;
 const DownloadIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>;
@@ -133,7 +133,14 @@ const ColorizedText = ({ text }) => {
 const App = () => {
   const [language, setLanguage] = useState<'en' | 'hi'>('hi');
   const [mode, setMode] = useState<Mode>('standard');
-  const [theme, setTheme] = useState<Theme>('light');
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+        const savedTheme = localStorage.getItem('civic-sense-guru-theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') return savedTheme;
+    } catch (e) { console.error("Could not read theme from localStorage", e); }
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    return 'light';
+  });
   const [sessionState, setSessionState] = useState<SessionState>('idle');
   const [processingStep, setProcessingStep] = useState<ProcessingStep>('idle');
   const [isThinking, setIsThinking] = useState(false);
@@ -162,8 +169,16 @@ const App = () => {
   
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove(theme === 'dark' ? 'light' : 'dark');
-    root.classList.add(theme);
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    try {
+      localStorage.setItem('civic-sense-guru-theme', theme);
+    } catch (e) {
+      console.error("Could not save theme to localStorage", e);
+    }
   }, [theme]);
   
   useEffect(() => {
