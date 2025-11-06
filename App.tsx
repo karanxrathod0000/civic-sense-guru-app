@@ -12,8 +12,6 @@ interface SpeechRecognition { lang: string; interimResults: boolean; onresult: (
 
 const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-const GOOGLE_COLORS = ['#4285F4', '#DB4437', '#F4B400', '#0F9D58'];
-
 const content = {
   en: {
     standard: { title: '🇮🇳 Civic Sense Guru', description: 'Your AI guide to becoming a better citizen' },
@@ -22,15 +20,15 @@ const content = {
     welcomeTitle: 'Welcome!',
     welcomeBody: 'Select a mode, pick a topic, or tap the mic to begin your conversation about Indian civic sense.',
     statusConnecting: 'Connecting...',
-    statusListening: 'Listening... Tap to stop.',
-    statusRecording: 'Recording... Tap to stop.',
+    statusListening: 'Listening...',
+    statusRecording: 'Recording...',
     statusProcessing: 'Processing...',
-    statusAnalyzing: 'Analyzing your question...',
-    statusGeneratingAudio: 'Generating audio response...',
+    statusAnalyzing: 'Analyzing...',
+    statusGeneratingAudio: 'Generating audio...',
     statusSpeaking: 'Speaking...',
-    statusIdle: 'Tap to start conversation',
-    errorSession: 'An error occurred during the session.',
-    errorStart: 'Failed to start the session. Check microphone permissions.',
+    statusIdle: 'Tap to start',
+    errorSession: 'Oops! An error occurred during the session. Please try again.',
+    errorStart: 'Failed to start. Check microphone permissions.',
     errorApiKey: 'API_KEY environment variable not set.',
     errorBrowserSupport: 'Speech recognition is not supported in this browser.',
     thinking: 'Thinking...',
@@ -46,7 +44,8 @@ const content = {
         waste: 'Waste Management',
         transport: 'Public Transport',
         democracy: 'Voting & Democracy',
-    }
+    },
+    suggestions: ['Tell me more', 'Give an example', 'What else?', 'Quiz me']
   },
   hi: {
     standard: { title: '🇮🇳 नागरिक शास्त्र गुरु', description: 'एक बेहतर नागरिक बनने के लिए आपका AI गाइड' },
@@ -55,15 +54,15 @@ const content = {
     welcomeTitle: 'आपका स्वागत है!',
     welcomeBody: 'एक मोड चुनें, एक विषय चुनें, या भारतीय नागरिक शास्त्र के बारे में अपनी बातचीत शुरू करने के लिए माइक पर टैप करें।',
     statusConnecting: 'कनेक्ट हो रहा है...',
-    statusListening: 'सुन रहा हूँ... रोकने के लिए टैप करें।',
-    statusRecording: 'रिकॉर्डिंग... रोकने के लिए टैप करें।',
+    statusListening: 'सुन रहा हूँ...',
+    statusRecording: 'रिकॉर्डिंग...',
     statusProcessing: 'प्रोसेस हो रहा है...',
-    statusAnalyzing: 'आपके प्रश्न का विश्लेषण हो रहा है...',
-    statusGeneratingAudio: 'ऑडियो प्रतिक्रिया उत्पन्न हो रही है...',
+    statusAnalyzing: 'विश्लेषण हो रहा है...',
+    statusGeneratingAudio: 'ऑडियो बन रहा है...',
     statusSpeaking: 'बोल रहा हूँ...',
-    statusIdle: 'बातचीत शुरू करने के लिए टैप करें',
-    errorSession: 'सत्र के दौरान एक त्रुटि हुई।',
-    errorStart: 'सत्र शुरू करने में विफल। माइक्रोफ़ोन अनुमतियों की जाँच करें।',
+    statusIdle: 'शुरू करने के लिए टैप करें',
+    errorSession: 'सत्र के दौरान एक त्रुटि हुई। कृपया पुनः प्रयास करें।',
+    errorStart: 'शुरू करने में विफल। माइक्रोफ़ोन अनुमतियों की जाँच करें।',
     errorApiKey: 'API_KEY एनवायरनमेंट वैरिएबल सेट नहीं है।',
     errorBrowserSupport: 'इस ब्राउज़र में स्पीच रिकग्निशन समर्थित नहीं है।',
     thinking: 'सोच रहा हूँ...',
@@ -79,7 +78,8 @@ const content = {
         waste: 'कचरा प्रबंधन',
         transport: 'सार्वजनिक परिवहन',
         democracy: 'मतदान और लोकतंत्र',
-    }
+    },
+    suggestions: ['और बताएं', 'एक उदाहरण दें', 'और क्या?', 'मेरी परीक्षा लें']
   }
 };
 
@@ -98,37 +98,29 @@ const systemInstructions = {
 
 type Mode = 'standard' | 'quick' | 'deep';
 type SessionState = 'idle' | 'connecting' | 'live' | 'recording' | 'processing' | 'speaking';
-type ProcessingStep = 'idle' | 'generatingText' | 'generatingAudio';
 type Theme = 'light' | 'dark';
 
 // --- SVG Icons ---
-const MicIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1h2v1a5 5 0 0 0 10 0v-1z"></path><path d="M12 18.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2a.5.5 0 0 1 .5.5z"></path></svg>;
-const StopIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"></path></svg>;
-const AiIcon = () => <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md"><svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2zM6 8a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0v-2a2 2 0 0 0-2-2zm12 0a2 2 0 0 0-2 2v2a2 2 0 0 0 4 0v-2a2 2 0 0 0-2-2zM7 15.222C7 14.547 7.547 14 8.222 14h7.556C16.453 14 17 14.547 17 15.222v2.556c0 .675-.547 1.222-1.222 1.222H8.222C7.547 19 7 18.453 7 17.778v-2.556z"/></svg></div>;
-const SunIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 5 5 5 5 0 0 0-5-5zM12 9a3 3 0 1 1-3 3 3 3 0 0 1 3-3zM12 2a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0V3a1 1 0 0 0-1-1zm0 18a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 4.22a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM18.36 18.36a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM2 12a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zm18 0a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 19.78a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41zM19.78 4.22a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41z"></path></svg>;
-const MoonIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>;
-const MenuIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"></path></svg>;
-const DownloadIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>;
-const RetryIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"></path></svg>;
-const TrafficIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"></path></svg>;
-const HygieneIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22M12 6l7.5 13h-15"></path></svg>;
-const WasteIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg>;
-const TransportIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5zM18 11H6V6h12v5z"></path></svg>;
-const DemocracyIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M13 10h5l-4 7h3l-4 7-4-7h3l-4-7h5m-1-4H4v2h2v13h2V8h2V6H8V4H6v2H4V4h7V2z"></path></svg>;
-
-const ColorizedText = ({ text }) => {
-  const parts = text.split(/(\s+)/);
-  let wordIndex = 0;
-  return <p className="text-gray-800 dark:text-gray-100">{parts.map((part, i) => {
-    if (/^\s+$/.test(part)) return <span key={i}>{part}</span>;
-    if (part.length > 0) {
-      const color = GOOGLE_COLORS[wordIndex % GOOGLE_COLORS.length];
-      wordIndex++;
-      return <span key={i} style={{ color }}>{part}</span>;
-    }
-    return null;
-  })}</p>;
-};
+const MicIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v1a7 7 0 0 1-14 0v-1h2v1a5 5 0 0 0 10 0v-1zM12 18.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2a.5.5 0 0 1 .5.5z" /></svg>;
+const StopIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z" /></svg>;
+const UserIcon = () => <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0 shadow-md">👤</div>
+const AiIcon = () => <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md">🤖</div>
+const SunIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 5 5 5 5 0 0 0-5-5zM12 9a3 3 0 1 1-3 3 3 3 0 0 1 3-3zM12 2a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0V3a1 1 0 0 0-1-1zm0 18a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 4.22a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM18.36 18.36a1 1 0 0 0-1.41 0 1 1 0 0 0 0 1.41l1.41 1.41a1 1 0 0 0 1.41-1.41zM2 12a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zm18 0a1 1 0 0 0-1 1v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-1-1zM4.22 19.78a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41zM19.78 4.22a1 1 0 0 0 0-1.41l-1.41-1.41a1 1 0 0 0-1.41 1.41z" /></svg>;
+const MoonIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>;
+const MenuIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" /></svg>;
+const DownloadIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>;
+const RetryIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg>;
+const TrafficIcon = ({ c }) => <g className={c}>🚦</g>;
+const HygieneIcon = ({ c }) => <g className={c}>🧹</g>;
+const WasteIcon = ({ c }) => <g className={c}>🗑️</g>;
+const TransportIcon = ({ c }) => <g className={c}>🚌</g>;
+const DemocracyIcon = ({ c }) => <g className={c}>🗳️</g>;
+const NewChatIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 9h-4v4h-2v-4H7V9h4V5h2v4h4v2z"/></svg>;
+const ShareIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>;
+const BookmarkIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>;
+const CopyIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
+const ChevronDownIcon = ({ c }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>;
+const SearchIcon = ({ c }) => <svg className={c} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>;
 
 const App = () => {
   const [language, setLanguage] = useState<'en' | 'hi'>('hi');
@@ -142,7 +134,6 @@ const App = () => {
     return 'light';
   });
   const [sessionState, setSessionState] = useState<SessionState>('idle');
-  const [processingStep, setProcessingStep] = useState<ProcessingStep>('idle');
   const [isThinking, setIsThinking] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +142,11 @@ const App = () => {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+
   const aiRef = useRef<GoogleGenAI | null>(null);
   const sessionRef = useRef<any | null>(null); 
   const streamRef = useRef<MediaStream | null>(null);
@@ -162,23 +158,29 @@ const App = () => {
   
   const nextStartTimeRef = useRef(0);
   const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptContainerRef = useRef<HTMLDivElement | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
+  const statusRef = useRef(sessionState);
 
-  useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [transcript, isThinking, error]);
+  useEffect(() => { statusRef.current = sessionState; }, [sessionState]);
+
+  useEffect(() => {
+    const container = transcriptContainerRef.current;
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      const handleScroll = () => {
+        const isScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        setShowScrollDown(!isScrolledToBottom);
+      };
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [transcript, isThinking, error]);
   
   useEffect(() => {
     const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    try {
-      localStorage.setItem('civic-sense-guru-theme', theme);
-    } catch (e) {
-      console.error("Could not save theme to localStorage", e);
-    }
+    if (theme === 'dark') { root.classList.add('dark'); } else { root.classList.remove('dark'); }
+    try { localStorage.setItem('civic-sense-guru-theme', theme); } catch (e) { console.error("Could not save theme to localStorage", e); }
   }, [theme]);
   
   useEffect(() => {
@@ -189,8 +191,10 @@ const App = () => {
   }, [language]);
 
   useEffect(() => {
-    try { const saved = localStorage.getItem('civic-sense-guru-history'); if (saved) setHistory(JSON.parse(saved)); } 
-    catch (e) { console.error("Failed to load history:", e); }
+    try {
+        const saved = localStorage.getItem('civic-sense-guru-history'); if (saved) setHistory(JSON.parse(saved));
+        const onboardingSeen = localStorage.getItem('civic-sense-guru-onboarding-seen'); if (!onboardingSeen) setShowOnboarding(true);
+    } catch (e) { console.error("Failed to load from localStorage:", e); }
   }, []);
 
   useEffect(() => {
@@ -214,7 +218,7 @@ const App = () => {
   }, [transcript, currentConversationId]);
 
   const disconnect = useCallback(() => {
-    setSessionState('idle'); setProcessingStep('idle'); setIsThinking(false);
+    setSessionState('idle'); setIsThinking(false); setSuggestions([]);
     sessionRef.current?.close(); sessionRef.current = null;
     scriptProcessorRef.current?.disconnect(); scriptProcessorRef.current = null;
     mediaStreamSourceRef.current?.disconnect(); mediaStreamSourceRef.current = null;
@@ -256,7 +260,7 @@ const App = () => {
   const processUserTurn = useCallback(async (userText) => {
     lastUserMessageRef.current = userText;
     setSessionState('processing');
-    setProcessingStep('generatingText');
+    setSuggestions([]);
     
     try {
       if (!aiRef.current) throw new Error("AI client not initialized.");
@@ -270,28 +274,35 @@ const App = () => {
 
       if (mode === 'deep') setIsThinking(false);
       const modelResponseText = response.text;
-      setTranscript(prev => [...prev, { speaker: 'model', text: modelResponseText, isFinal: true }]);
+      setTranscript(prev => [...prev, { speaker: 'model', text: modelResponseText, isFinal: true, timestamp: Date.now() }]);
 
-      setProcessingStep('generatingAudio');
       setSessionState('speaking');
       const ttsResponse = await aiRef.current.models.generateContent({
         model: "gemini-2.5-flash-preview-tts", contents: [{ parts: [{ text: modelResponseText }] }], config: { responseModalities: [Modality.AUDIO] }
       });
       const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
-          const outputCtx = outputAudioContextRef.current?.state !== 'closed' ? outputAudioContextRef.current : new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-          outputAudioContextRef.current = outputCtx;
+          let outputCtx = outputAudioContextRef.current;
+          if (!outputCtx || outputCtx.state === 'closed') {
+              outputCtx = new ((window as any).AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+              outputAudioContextRef.current = outputCtx;
+          }
           const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
           const sourceNode = outputCtx.createBufferSource();
           sourceNode.buffer = audioBuffer;
           sourceNode.connect(outputCtx.destination);
           sourceNode.start();
-          sourceNode.onended = () => { setSessionState('idle'); setProcessingStep('idle'); };
-      } else { setSessionState('idle'); setProcessingStep('idle'); }
+          sourceNode.onended = () => { 
+            if (statusRef.current === 'speaking') {
+                setSessionState('idle'); 
+                setSuggestions(content[language].suggestions);
+            }
+          };
+      } else { setSessionState('idle'); setSuggestions(content[language].suggestions); }
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : content[language].errorSession);
-      setSessionState('idle'); setProcessingStep('idle'); setIsThinking(false);
+      setSessionState('idle'); setIsThinking(false);
     }
   }, [language, mode]);
 
@@ -301,12 +312,10 @@ const App = () => {
 
     try {
         streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
         inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         nextStartTimeRef.current = 0;
         audioSourcesRef.current.clear();
-        
         if (!aiRef.current) throw new Error("AI Client not initialized");
 
         const sessionPromise = aiRef.current.live.connect({
@@ -337,7 +346,11 @@ const App = () => {
                     const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
                     if (base64Audio) {
                         setSessionState('speaking');
-                        const outputCtx = outputAudioContextRef.current!;
+                        const outputCtx = outputAudioContextRef.current;
+                        if (!outputCtx || outputCtx.state === 'closed') {
+                            console.warn('Audio context closed during live session, skipping audio playback.');
+                            return;
+                        }
                         nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
                         const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
                         const source = outputCtx.createBufferSource();
@@ -370,11 +383,10 @@ const App = () => {
   
   const startTurnBasedConversation = useCallback(async (initialText = '') => {
     if (!SpeechRecognitionAPI) { setError(content[language].errorBrowserSupport); return; }
-    
     if (!currentConversationId) setCurrentConversationId(Date.now().toString());
 
     if (initialText) {
-      setTranscript([{ speaker: 'user', text: initialText, isFinal: true }]);
+      setTranscript([{ speaker: 'user', text: initialText, isFinal: true, timestamp: Date.now() }]);
       await processUserTurn(initialText);
       return;
     }
@@ -395,7 +407,7 @@ const App = () => {
         const newTranscript = [...prev]; const last = newTranscript[newTranscript.length - 1];
         const text = (finalTranscript || interimTranscript).trim();
         if (last?.speaker === 'user' && !last.isFinal) last.text = text;
-        else if (text) newTranscript.push({ speaker: 'user', text, isFinal: false });
+        else if (text) newTranscript.push({ speaker: 'user', text, isFinal: false, timestamp: Date.now() });
         return newTranscript;
       });
     };
@@ -409,13 +421,18 @@ const App = () => {
           if (!lastMsg.text.trim()) { setSessionState('idle'); return prev.slice(0, lastMsgIndex); }
           
           const finalTranscript = [...prev];
-          finalTranscript[lastMsgIndex] = { ...lastMsg, isFinal: true };
+          finalTranscript[lastMsgIndex] = { ...lastMsg, isFinal: true, timestamp: Date.now() };
           processUserTurn(lastMsg.text);
           return finalTranscript;
       });
     };
     recognition.start();
   }, [language, currentConversationId, processUserTurn]);
+
+  const handleSuggestionClick = (suggestion) => {
+      if (sessionState !== 'idle') return;
+      startTurnBasedConversation(suggestion);
+  };
   
   const handleTopicClick = (topic) => {
     if (sessionState !== 'idle') disconnect();
@@ -424,9 +441,8 @@ const App = () => {
   };
   
   const handleButtonClick = () => {
-    if (sessionState !== 'idle') {
-        disconnect();
-    } else {
+    if (sessionState !== 'idle') { disconnect(); } 
+    else {
       if (!currentConversationId) setCurrentConversationId(Date.now().toString());
       if (mode === 'standard') startLiveConversation();
       else startTurnBasedConversation();
@@ -434,7 +450,7 @@ const App = () => {
   };
 
   const handleDownloadChat = () => {
-    const content = transcript.map(m => `${m.speaker === 'user' ? 'User' : 'Guru'}: ${m.text}`).join('\n\n');
+    const content = transcript.map(m => `${m.speaker === 'user' ? 'User' : 'Guru'} (${new Date(m.timestamp).toLocaleTimeString()}): ${m.text}`).join('\n\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -458,13 +474,15 @@ const App = () => {
         case 'live': return content[language].statusListening;
         case 'speaking': return content[language].statusSpeaking;
         case 'recording': return content[language].statusRecording;
-        case 'processing': 
-            if (processingStep === 'generatingText') return content[language].statusAnalyzing;
-            if (processingStep === 'generatingAudio') return content[language].statusGeneratingAudio;
-            return content[language].statusProcessing;
+        case 'processing': return content[language].statusAnalyzing;
         default: return content[language].statusIdle;
     }
   };
+
+  const closeOnboarding = () => {
+      setShowOnboarding(false);
+      try { localStorage.setItem('civic-sense-guru-onboarding-seen', 'true'); } catch(e) { console.error(e); }
+  }
   
   const currentContent = content[language][mode];
   const isTransacting = sessionState !== 'idle';
@@ -478,66 +496,78 @@ const App = () => {
       { id: 'democracy', icon: DemocracyIcon, text: topicContent.democracy },
   ];
 
+  const MicStateClasses = {
+    idle: 'bg-gradient-to-br from-blue-500 to-indigo-600',
+    connecting: 'bg-gradient-to-br from-yellow-400 to-amber-500',
+    live: 'bg-gradient-to-br from-green-400 to-emerald-500',
+    recording: 'bg-gradient-to-br from-green-400 to-emerald-500',
+    processing: 'bg-gradient-to-br from-yellow-400 to-amber-500',
+    speaking: 'bg-gradient-to-br from-purple-500 to-fuchsia-600',
+  };
+
   return (
     <>
      <style>{`
-        @keyframes ripple {
-          0% { transform: scale(0.8); opacity: 1; }
-          100% { transform: scale(2.5); opacity: 0; }
-        }
-        .animate-ripple-1 { animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
-        .animate-ripple-2 { animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite 0.25s; }
-        .animate-ripple-3 { animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite 0.5s; }
-        .animate-ripple-4 { animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite 0.75s; }
+        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .animate-pulse-logo { animation: pulse 2.5s infinite; }
+        @keyframes breathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(0,0,0,0.2); } 50% { transform: scale(1.03); box-shadow: 0 10px 25px rgba(0,0,0,0.3); } }
+        .animate-breathe { animation: breathe 4s ease-in-out infinite; }
+        @keyframes slideInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animate-slideInUp { animation: slideInUp 0.5s ease-out forwards; }
+        .slide-in-stagger > * { animation-delay: calc(var(--stagger-index) * 80ms); }
      `}</style>
-    <div className="flex h-screen w-screen bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-200 font-sans transition-colors duration-300 overflow-hidden">
-      {/* History Panel */}
-      <aside className={`absolute lg:relative z-30 h-full w-72 bg-gray-100 dark:bg-gray-900/80 backdrop-blur-lg border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-300 ease-in-out flex flex-col ${isHistoryOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
-              <h2 className="text-xl font-bold">{content[language].history}</h2>
-              <button onClick={startNewConversation} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-semibold">{content[language].newChat}</button>
+    <div className={`flex h-screen w-screen font-sans transition-colors duration-500 overflow-hidden ${theme === 'light' ? 'bg-gradient-to-br from-white to-sky-100 text-gray-900' : 'bg-gradient-to-br from-slate-900 to-slate-800 text-gray-200'}`}>
+      <aside className={`absolute lg:relative z-40 h-full w-72 bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg border-r border-gray-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col ${isHistoryOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-800 flex-shrink-0">
+              <h2 className="text-xl font-bold">History</h2>
+              <button onClick={startNewConversation} className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 text-sm font-semibold active:scale-95 transition-all">New Chat</button>
           </div>
           <div className="flex-1 overflow-y-auto">
               {history.sort((a,b) => b.timestamp - a.timestamp).map(c => (
-                  <button key={c.id} onClick={() => loadConversation(c.id)} className={`w-full text-left px-4 py-3 truncate transition-colors ${currentConversationId === c.id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-gray-200 dark:hover:bg-gray-800'}`}>
+                  <button key={c.id} onClick={() => loadConversation(c.id)} className={`w-full text-left px-4 py-3 truncate transition-colors ${currentConversationId === c.id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-gray-200 dark:hover:bg-slate-800'}`}>
                       <p className="font-semibold text-gray-800 dark:text-gray-200">{c.title}</p>
                       <p className="text-xs text-gray-500">{new Date(c.timestamp).toLocaleString()}</p>
                   </button>
               ))}
           </div>
-          <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-              <button onClick={clearHistory} className="w-full text-center p-2 rounded-md bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">{content[language].clearHistory}</button>
+          <div className="p-4 border-t border-gray-200 dark:border-slate-800 flex-shrink-0">
+              <button onClick={clearHistory} className="w-full text-center p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95 transition-colors">Clear History</button>
           </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex flex-col flex-1 relative">
-        <header className="p-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-left border-b border-gray-200 dark:border-gray-800 bg-gray-50/80 dark:bg-black/80 backdrop-blur-lg sticky top-0 z-10">
+        <header className="p-3 flex justify-between items-center gap-4 border-b border-gray-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 z-20">
           <div className="flex items-center gap-2">
-            <button onClick={() => setIsHistoryOpen(!isHistoryOpen)} className="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 lg:hidden"><MenuIcon c="w-6 h-6"/></button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{currentContent.title}</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{currentContent.description}</p>
+            <button onClick={() => setIsHistoryOpen(!isHistoryOpen)} className="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-slate-800 lg:hidden active:scale-95 transition-transform"><MenuIcon c="w-6 h-6"/></button>
+            <div className="flex items-center gap-2">
+                <div className="text-2xl animate-pulse-logo">🇮🇳</div>
+                <div>
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">{currentContent.title}</h1>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{currentContent.description}</p>
+                </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-              <div className="flex items-center gap-1 p-1 bg-gray-200 dark:bg-gray-900 rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-gray-700">
-                  {(['standard', 'quick', 'deep'] as Mode[]).map(m => <button key={m} onClick={() => handleModeChange(m)} disabled={isTransacting} className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all capitalize ${mode === m ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-gray-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>{m}</button>)}
+          <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-200 dark:bg-slate-900 rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-slate-700">
+                  {(['standard', 'quick', 'deep'] as Mode[]).map(m => <button key={m} onClick={() => handleModeChange(m)} disabled={isTransacting} className={`px-3 py-1 rounded-md text-sm font-semibold transition-all capitalize ${mode === m ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>{m}</button>)}
               </div>
-              <div className="flex items-center gap-1 p-1 bg-gray-200 dark:bg-gray-900 rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-gray-700">
-                  <button onClick={() => handleLanguageChange('en')} disabled={isTransacting} className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${language === 'en' ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-gray-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>English</button>
-                  <button onClick={() => handleLanguageChange('hi')} disabled={isTransacting} className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${language === 'hi' ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-gray-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>हिन्दी</button>
+              <div className="hidden sm:flex items-center gap-1 p-1 bg-gray-200 dark:bg-slate-900 rounded-lg ring-1 ring-inset ring-gray-300 dark:ring-slate-700">
+                  <button onClick={() => handleLanguageChange('en')} disabled={isTransacting} className={`px-2 py-1 rounded-md text-sm font-semibold transition-all ${language === 'en' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>EN</button>
+                  <button onClick={() => handleLanguageChange('hi')} disabled={isTransacting} className={`px-2 py-1 rounded-md text-sm font-semibold transition-all ${language === 'hi' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-white' : 'text-gray-500 hover:bg-gray-300/50 dark:text-gray-400 dark:hover:bg-slate-800/50'} disabled:cursor-not-allowed disabled:opacity-50`}>HI</button>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadChat} disabled={transcript.length === 0} title={content[language].downloadChat} className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><DownloadIcon c="w-6 h-6" /></button>
-                <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-800 transition-colors" aria-label="Toggle theme">{theme === 'dark' ? <SunIcon c="w-6 h-6" /> : <MoonIcon c="w-6 h-6" />}</button>
+                <button title="Search (Coming Soon)" className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95"><SearchIcon c="w-5 h-5" /></button>
+                <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-slate-800/50 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors active:scale-95" aria-label="Toggle theme">{theme === 'dark' ? <SunIcon c="w-5 h-5" /> : <MoonIcon c="w-5 h-5" />}</button>
+                 <div className={`w-3 h-3 rounded-full transition-colors ${error ? 'bg-red-500' : (isTransacting ? 'bg-yellow-500 animate-pulse' : 'bg-green-500')}`} title={error ? 'Error' : (isTransacting ? 'Connected' : 'Idle')}></div>
               </div>
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col overflow-y-auto p-6 md:p-8">
+        <main ref={transcriptContainerRef} className="flex-1 flex flex-col overflow-y-auto p-4 md:p-6 relative">
           {transcript.length === 0 && !isTransacting && !error ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400">
+            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 animate-fadeIn">
               <div className="mb-4 text-6xl">🇮🇳</div>
               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-200">{content[language].welcomeTitle}</h2>
               <p className="max-w-md mt-2">{content[language].welcomeBody}</p>
@@ -545,36 +575,80 @@ const App = () => {
           ) : (
             <div className="max-w-3xl w-full mx-auto space-y-6">
               {transcript.map((msg, index) => (
-                <div key={index} className={`flex items-end gap-3 ${msg.speaker === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={index} className={`flex items-end gap-3 animate-slideInUp ${msg.speaker === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.speaker === 'model' && <AiIcon />}
-                  <div className={`max-w-md lg:max-w-xl px-5 py-3 rounded-2xl shadow-md ${msg.speaker === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-white text-gray-900 dark:bg-gray-800 dark:text-white rounded-bl-none ring-1 ring-gray-200 dark:ring-gray-700'}`}>
-                    <div className={!msg.isFinal ? 'opacity-70' : ''}>{msg.speaker === 'model' ? <ColorizedText text={msg.text} /> : <p>{msg.text}</p>}</div>
+                  <div className={`relative group max-w-md lg:max-w-xl px-4 py-3 rounded-2xl shadow-md ${msg.speaker === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-white text-gray-900 dark:bg-slate-700 dark:text-white rounded-bl-none'}`}>
+                    <p className={!msg.isFinal ? 'opacity-70' : ''}>{msg.text}</p>
+                    <span className="text-xs opacity-60 mt-1 block text-right">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <button onClick={() => navigator.clipboard.writeText(msg.text)} className="absolute -top-2 -right-2 p-1.5 bg-gray-300 dark:bg-slate-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity active:scale-95"><CopyIcon c="w-4 h-4" /></button>
                   </div>
+                   {msg.speaker === 'user' && <UserIcon />}
                 </div>
               ))}
-              {isThinking && (<div className="flex items-end gap-3 justify-start"><AiIcon /><div className="w-64 max-w-md lg:max-w-lg p-4 rounded-2xl bg-white dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700 shadow-md space-y-2"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div><div className="h-3 w-5/6 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div></div></div>)}
-              {error && (<div className="flex items-center gap-3 p-4 rounded-lg bg-red-500/10 text-red-500 ring-1 ring-red-500/20"><RetryIcon c="w-6 h-6 flex-shrink-0" /><div className="flex-1"><p className="font-semibold">An error occurred</p><p className="text-sm">{error}</p></div><button onClick={handleRetry} className="ml-4 px-3 py-1.5 rounded-md bg-red-500 text-white text-sm font-semibold hover:bg-red-600">{content[language].retry}</button></div>)}
-              <div ref={transcriptEndRef} />
+              {isThinking && (<div className="flex items-end gap-3 justify-start"><AiIcon /><div className="w-64 max-w-md lg:max-w-lg p-4 rounded-2xl bg-white dark:bg-slate-700 shadow-md space-y-2"><div className="h-3 bg-gray-200 dark:bg-slate-600 rounded-full animate-pulse"></div><div className="h-3 w-5/6 bg-gray-200 dark:bg-slate-600 rounded-full animate-pulse"></div></div></div>)}
+              {error && (<div className="flex items-center gap-3 p-4 rounded-lg bg-red-500/10 text-red-500 ring-1 ring-red-500/20"><RetryIcon c="w-6 h-6 flex-shrink-0" /><div className="flex-1"><p className="font-semibold">Oops, something went wrong!</p><p className="text-sm">{error}</p></div><button onClick={handleRetry} className="ml-4 px-3 py-1.5 rounded-md bg-red-500 text-white text-sm font-semibold hover:bg-red-600 active:scale-95">{content[language].retry}</button></div>)}
             </div>
           )}
+          {showScrollDown && <button onClick={() => transcriptContainerRef.current?.scrollTo({ top: transcriptContainerRef.current.scrollHeight, behavior: 'smooth' })} className="absolute bottom-24 right-8 z-10 w-12 h-12 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><ChevronDownIcon c="w-6 h-6" /></button>}
         </main>
 
-        <footer className="p-4 bg-gray-50/80 dark:bg-black/80 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800">
+        <footer className="p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-lg border-t border-gray-200/50 dark:border-slate-800/50">
           <div className="flex flex-col items-center justify-center gap-4">
-            {mode !== 'standard' && <div className="flex flex-wrap justify-center gap-2 mb-2">{topics.map(topic => (<button key={topic.id} onClick={() => handleTopicClick(topic.text)} disabled={isTransacting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 rounded-full shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"><topic.icon c="w-5 h-5" />{topic.text}</button>))}</div>}
+            <div className="flex flex-wrap justify-center gap-2 mb-2 slide-in-stagger">
+              {transcript.length === 0 && !isTransacting ? topics.map((topic, i) => (<button key={topic.id} style={{ '--stagger-index': i }} onClick={() => handleTopicClick(topic.text)} disabled={isTransacting} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-800 rounded-full shadow-sm ring-1 ring-gray-200 dark:ring-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:-translate-y-1 active:scale-95 animate-slideInUp"><svg className="w-5 h-5" viewBox="0 0 24 24"><topic.icon c="text-[20px]" /></svg>{topic.text}</button>))
+              : suggestions.map((s, i) => <button key={i} style={{ '--stagger-index': i }} onClick={() => handleSuggestionClick(s)} className="px-3 py-2 text-sm font-medium bg-gray-200 dark:bg-slate-700 rounded-full hover:bg-gray-300 dark:hover:bg-slate-600 active:scale-95 transition-all animate-slideInUp">{s}</button>)
+              }
+            </div>
             <div className="relative">
-              {isListening && <>
-                  <div className="absolute inset-0 rounded-full bg-blue-400/50 animate-ripple-1"></div>
-                  <div className="absolute inset-0 rounded-full bg-red-400/50 animate-ripple-2"></div>
-                  <div className="absolute inset-0 rounded-full bg-yellow-400/50 animate-ripple-3"></div>
-                  <div className="absolute inset-0 rounded-full bg-green-400/50 animate-ripple-4"></div>
-              </>}
-              <button onClick={handleButtonClick} disabled={sessionState === 'connecting' || sessionState === 'processing'} className={`relative w-28 h-28 rounded-full flex items-center justify-center text-white transition-all duration-300 ease-in-out shadow-xl transform active:scale-95 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-black ${(sessionState === 'connecting' || sessionState === 'processing') ? 'bg-yellow-500 cursor-not-allowed' : ''} ${(isListening || sessionState === 'speaking') ? 'bg-gradient-to-br from-red-500 to-rose-600 focus:ring-red-300' : ''} ${sessionState === 'idle' ? 'bg-gradient-to-br from-blue-500 to-indigo-600 focus:ring-blue-300' : ''}`}>{isTransacting ? <StopIcon c="w-12 h-12" /> : <MicIcon c="w-14 h-14" />}</button>
+              <button onClick={handleButtonClick} disabled={sessionState === 'connecting'} className={`relative w-24 h-24 rounded-full flex items-center justify-center text-white transition-all duration-300 ease-in-out shadow-xl transform active:scale-95 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-black ${MicStateClasses[sessionState]} ${sessionState === 'idle' ? 'animate-breathe' : ''}`}>{isTransacting ? <StopIcon c="w-10 h-10" /> : <MicIcon c="w-12 h-12" />}</button>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium h-5">{getStatusText()}</p>
+             <div className="hidden sm:flex text-xs text-gray-400 dark:text-gray-500 items-center gap-4">
+                 <span>About</span><span>|</span><span>Help</span><span>|</span><span>Privacy</span><span className="font-bold">|</span><span>Made with ❤️ in India</span><span>|</span><span>v1.0.0</span>
+            </div>
           </div>
         </footer>
       </div>
+      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-3">
+          <button onClick={startNewConversation} title="New Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><NewChatIcon c="w-6 h-6" /></button>
+          <button onClick={handleDownloadChat} disabled={transcript.length === 0} title="Export Chat" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"><DownloadIcon c="w-6 h-6" /></button>
+          <button title="Share (Coming Soon)" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><ShareIcon c="w-6 h-6" /></button>
+          <button title="Bookmark (Coming Soon)" className="w-14 h-14 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-lg flex items-center justify-center hover:scale-110 active:scale-100 transition-transform"><BookmarkIcon c="w-6 h-6" /></button>
+      </div>
+
+       {showOnboarding && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 text-center animate-fadeIn">
+            {onboardingStep === 0 && <>
+              <h2 className="text-2xl font-bold mb-2">Welcome to Civic Sense Guru!</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">Your personal AI guide to becoming a better citizen.</p>
+              <button onClick={() => setOnboardingStep(1)} className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-600 transition-colors">Let's Get Started</button>
+            </>}
+            {onboardingStep === 1 && <>
+              <MicIcon c="w-16 h-16 text-blue-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">Tap the Mic</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">Press the large microphone button to start a voice conversation at any time.</p>
+              <button onClick={() => setOnboardingStep(2)} className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-600 transition-colors">Next</button>
+            </>}
+             {onboardingStep === 2 && <>
+              <div className="flex justify-center gap-2 mb-4">
+                <span className="px-3 py-1 bg-gray-200 dark:bg-slate-700 rounded-full text-sm">Standard</span>
+                <span className="px-3 py-1 bg-gray-200 dark:bg-slate-700 rounded-full text-sm">Quick</span>
+                <span className="px-3 py-1 bg-gray-200 dark:bg-slate-700 rounded-full text-sm">Deep</span>
+              </div>
+              <h2 className="text-xl font-bold mb-2">Choose Your Mode</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">Switch between conversation modes or languages using the toggles in the header.</p>
+              <button onClick={() => setOnboardingStep(3)} className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-600 transition-colors">Next</button>
+            </>}
+            {onboardingStep === 3 && <>
+              <h2 className="text-2xl font-bold mb-2">You're All Set!</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">Try asking: "What are some basic traffic rules for pedestrians?"</p>
+              <button onClick={closeOnboarding} className="w-full bg-green-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-600 transition-colors">Start Learning</button>
+            </>}
+             <button onClick={closeOnboarding} className="text-xs text-gray-400 hover:underline mt-4">Skip Tutorial</button>
+          </div>
+        </div>
+      )}
     </div>
     </>
   );
